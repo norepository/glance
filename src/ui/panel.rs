@@ -4,7 +4,8 @@ use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
 use objc2::{define_class, msg_send, MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::{
-    NSBackingStoreType, NSColor, NSFont, NSPanel, NSTextField, NSView,
+    NSBackingStoreType, NSColor, NSFocusRingType, NSFont, NSPanel, NSTextField, NSView,
+    NSVisualEffectBlendingMode, NSVisualEffectMaterial, NSVisualEffectState, NSVisualEffectView,
     NSWindowCollectionBehavior, NSWindowStyleMask,
 };
 use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
@@ -15,6 +16,11 @@ pub const BASE_HEIGHT: f64 = 60.0;
 const FONT_SIZE: f64 = 28.0;
 /// Above ordinary windows (NSStatusWindowLevel). Keeps the launcher on top.
 const PANEL_LEVEL: isize = 25;
+/// Corner radius for the rounded panel.
+const CORNER_RADIUS: f64 = 14.0;
+/// Insets for the search field so its text clears the rounded corners.
+const FIELD_TOP_PAD: f64 = 12.0;
+const FIELD_X: f64 = 16.0;
 
 define_class!(
     #[unsafe(super(NSPanel))]
@@ -82,7 +88,26 @@ pub fn build_panel(
             NSWindowCollectionBehavior::CanJoinAllSpaces
                 | NSWindowCollectionBehavior::FullScreenAuxiliary,
         );
+        // Transparent window + drop shadow so the rounded blur stands out.
+        panel.setOpaque(false);
+        panel.setBackgroundColor(Some(&NSColor::clearColor()));
+        panel.setHasShadow(true);
     }
+
+    // Blurred, rounded background gives the bar contrast against the desktop.
+    let effect = NSVisualEffectView::initWithFrame(NSVisualEffectView::alloc(mtm), content_rect);
+    effect.setMaterial(NSVisualEffectMaterial::HUDWindow);
+    effect.setBlendingMode(NSVisualEffectBlendingMode::BehindWindow);
+    effect.setState(NSVisualEffectState::Active);
+    effect.setWantsLayer(true);
+    if let Some(layer) = effect.layer() {
+        layer.setCornerRadius(CORNER_RADIUS);
+        layer.setMasksToBounds(true);
+        layer.setBorderWidth(1.0);
+        layer.setBorderColor(Some(&NSColor::separatorColor().CGColor()));
+    }
+    let effect_view: &NSView = &effect;
+    panel.setContentView(Some(effect_view));
 
     // Search field sits at the top of the content view (full content for now,
     // re-framed to the top strip once results appear).
@@ -92,6 +117,8 @@ pub fn build_panel(
     field.setDrawsBackground(false);
     field.setEditable(true);
     field.setSelectable(true);
+    // No blue focus ring around the search field.
+    field.setFocusRingType(NSFocusRingType::None);
     field.setFont(Some(&NSFont::systemFontOfSize(FONT_SIZE)));
     field.setTextColor(Some(&NSColor::labelColor()));
     field.setPlaceholderString(Some(&NSString::from_str("Search…")));
@@ -128,9 +155,11 @@ pub fn resize(
     panel.setFrame_display(frame, true);
 
     let width = frame.size.width;
+    // Lower the field a touch (text is top-aligned) and inset it horizontally so
+    // it doesn't sit under the rounded corners.
     field.setFrame(NSRect::new(
-        NSPoint::new(0.0, results_height),
-        NSSize::new(width, BASE_HEIGHT),
+        NSPoint::new(FIELD_X, results_height),
+        NSSize::new(width - 2.0 * FIELD_X, BASE_HEIGHT - FIELD_TOP_PAD),
     ));
     results_view.setFrame(NSRect::new(
         NSPoint::new(0.0, 0.0),

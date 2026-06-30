@@ -12,21 +12,29 @@ use crate::core::item::{Action, SearchItem};
 /// Files are only searched once the query is at least this long, to avoid
 /// ranking the entire index on one or two characters.
 const MIN_FILE_QUERY_LEN: usize = 3;
+/// Commands need at least this many characters so single letters don't surface
+/// them.
+const MIN_CMD_QUERY_LEN: usize = 2;
 /// Score bonuses so apps and commands outrank files at equal match quality.
 const APP_BONUS: u32 = 100;
-const CMD_BONUS: u32 = 150;
+const CMD_BONUS: u32 = 100;
 
-/// A built-in command surfaced by keyword (e.g. "settings").
+/// A built-in command surfaced when the query is a prefix of one of its
+/// keywords (e.g. "set" / "glan"), rather than a loose fuzzy match.
 struct Command {
-    keywords: String,
+    keywords: &'static str,
     title: &'static str,
     subtitle: &'static str,
     action: Action,
 }
 
-impl AsRef<str> for Command {
-    fn as_ref(&self) -> &str {
-        &self.keywords
+impl Command {
+    /// The first keyword the (lower-cased) query is a prefix of, if any.
+    fn prefix_token(&self, query_lower: &str) -> Option<&'static str> {
+        let keywords: &'static str = self.keywords;
+        keywords
+            .split_whitespace()
+            .find(|token| token.starts_with(query_lower))
     }
 }
 
@@ -71,8 +79,21 @@ impl SearchEngine {
             scored.push((app_item(app), score + APP_BONUS));
         }
 
-        for (cmd, score) in pattern.match_list(self.commands.iter(), &mut self.matcher) {
-            scored.push((command_item(cmd), score + CMD_BONUS));
+        if query.len() >= MIN_CMD_QUERY_LEN {
+            let query_lower = query.to_lowercase();
+            for cmd in &self.commands {
+                // Gate on a prefix match, then score the matched keyword with
+                // nucleo so the command ranks on the same scale as apps.
+                if let Some(token) = cmd.prefix_token(&query_lower) {
+                    if let Some((_, score)) = pattern
+                        .match_list(std::iter::once(token), &mut self.matcher)
+                        .into_iter()
+                        .next()
+                    {
+                        scored.push((command_item(cmd), score + CMD_BONUS));
+                    }
+                }
+            }
         }
 
         if query.len() >= MIN_FILE_QUERY_LEN {
@@ -96,7 +117,7 @@ impl SearchEngine {
 
 fn builtin_commands() -> Vec<Command> {
     vec![Command {
-        keywords: "settings preferences glance config options".to_string(),
+        keywords: "settings preferences glance",
         title: "Glance Settings",
         subtitle: "Preferences",
         action: Action::OpenSettings,
@@ -152,12 +173,20 @@ mod tests {
     #[test]
     fn surfaces_the_settings_command() {
         let mut engine = SearchEngine::new();
-        let results = engine.search("settings", 8);
-        assert!(
-            results
+        let has_settings = |q: &str, engine: &mut SearchEngine| {
+            engine
+                .search(q, 8)
                 .iter()
-                .any(|item| matches!(item.action, Action::OpenSettings)),
-            "expected the settings command"
-        );
+                .any(|item| matches!(item.action, Action::OpenSettings))
+        };
+
+        // Prefixes of its keywords surface it.
+        assert!(has_settings("settings", &mut engine));
+        assert!(has_settings("set", &mut engine));
+        assert!(has_settings("glan", &mut engine));
+
+        // Unrelated queries must not (the old fuzzy match leaked on these).
+        assert!(!has_settings("lo", &mut engine));
+        assert!(!has_settings("spo", &mut engine));
     }
 }

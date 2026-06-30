@@ -34,9 +34,11 @@ objc2-app-kit = { version = "0.3", features = [
     "NSWorkspace",
     "NSOpenPanel",
     "NSSavePanel",
+    "NSVisualEffectView",
     "NSGraphics",
     "NSRunningApplication",
 ] }
+objc2-quartz-core = { version = "0.3", features = ["CALayer"] }
 global-hotkey = "0.8"
 nucleo = "0.5"
 ignore = "0.4"
