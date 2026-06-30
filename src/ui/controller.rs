@@ -1,6 +1,6 @@
 //! `SearchController` — the search field's delegate. Runs live fuzzy search on
-//! every keystroke, drives keyboard navigation of the result list, and launches
-//! the selected app.
+//! every keystroke, drives keyboard navigation of the result list, and
+//! activates the selected result (launch app/file, or open settings).
 
 use std::cell::{Cell, RefCell};
 
@@ -8,15 +8,17 @@ use objc2::rc::Retained;
 use objc2::runtime::{NSObjectProtocol, Sel};
 use objc2::{define_class, msg_send, sel, DefinedClass, MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::{
-    NSControl, NSControlTextEditingDelegate, NSTextField, NSTextFieldDelegate, NSTextView,
-    NSView, NSWorkspace,
+    NSControl, NSControlTextEditingDelegate, NSTextField, NSTextFieldDelegate, NSTextView, NSView,
+    NSWorkspace,
 };
 use objc2_foundation::{NSNotification, NSObject, NSPoint, NSRect, NSSize, NSString, NSURL};
 
-use crate::core::app_index::AppEntry;
+use crate::core::file_index::FileIndex;
+use crate::core::item::{Action, SearchItem};
 use crate::core::search::SearchEngine;
 use crate::ui::panel::{self, GlancePanel, PANEL_WIDTH};
 use crate::ui::result_row::{build_row, ROW_HEIGHT};
+use crate::ui::settings::SettingsController;
 
 const MAX_RESULTS: usize = 8;
 
@@ -25,8 +27,10 @@ pub struct SearchControllerIvars {
     field: Retained<NSTextField>,
     results_view: Retained<NSView>,
     engine: RefCell<SearchEngine>,
-    results: RefCell<Vec<AppEntry>>,
+    file_index: FileIndex,
+    results: RefCell<Vec<SearchItem>>,
     selected: Cell<usize>,
+    settings: RefCell<Option<Retained<SettingsController>>>,
 }
 
 define_class!(
@@ -66,7 +70,7 @@ define_class!(
                 self.move_selection(-1);
                 true
             } else if selector == sel!(insertNewline:) {
-                self.launch_selected();
+                self.activate_selected();
                 true
             } else {
                 false
@@ -82,14 +86,17 @@ impl SearchController {
         field: Retained<NSTextField>,
         results_view: Retained<NSView>,
         engine: SearchEngine,
+        file_index: FileIndex,
     ) -> Retained<Self> {
         let ivars = SearchControllerIvars {
             panel,
             field,
             results_view,
             engine: RefCell::new(engine),
+            file_index,
             results: RefCell::new(Vec::new()),
             selected: Cell::new(0),
+            settings: RefCell::new(None),
         };
         let this = Self::alloc(mtm).set_ivars(ivars);
         unsafe { msg_send![super(this), init] }
@@ -111,8 +118,8 @@ impl SearchController {
 
         panel::resize(&iv.panel, &iv.field, &iv.results_view, results_height);
 
-        for (i, entry) in results.iter().enumerate() {
-            let row = build_row(mtm, entry, PANEL_WIDTH, i == selected);
+        for (i, item) in results.iter().enumerate() {
+            let row = build_row(mtm, item, PANEL_WIDTH, i == selected);
             // Non-flipped coords: row 0 sits at the top.
             let y = results_height - (i as f64 + 1.0) * ROW_HEIGHT;
             row.setFrame(NSRect::new(
@@ -135,22 +142,37 @@ impl SearchController {
         self.render();
     }
 
-    fn launch_selected(&self) {
-        let iv = self.ivars();
-        let entry = {
-            let results = iv.results.borrow();
-            results.get(iv.selected.get()).cloned()
+    fn activate_selected(&self) {
+        let action = {
+            let results = self.ivars().results.borrow();
+            results.get(self.ivars().selected.get()).map(|i| i.action.clone())
         };
-        let Some(entry) = entry else {
+        let Some(action) = action else {
             return;
         };
 
-        let path = entry.path.to_string_lossy();
-        let url = NSURL::fileURLWithPath(&NSString::from_str(&path));
-        let _ = NSWorkspace::sharedWorkspace().openURL(&url);
+        match action {
+            Action::Open(path) => {
+                let url = NSURL::fileURLWithPath(&NSString::from_str(&path.to_string_lossy()));
+                let _ = NSWorkspace::sharedWorkspace().openURL(&url);
+                self.reset();
+                self.ivars().panel.orderOut(None);
+            }
+            Action::OpenSettings => {
+                self.reset();
+                self.ivars().panel.orderOut(None);
+                self.open_settings();
+            }
+        }
+    }
 
-        self.reset();
-        iv.panel.orderOut(None);
+    fn open_settings(&self) {
+        let mtm = self.mtm();
+        let iv = self.ivars();
+        let mut slot = iv.settings.borrow_mut();
+        let controller =
+            slot.get_or_insert_with(|| SettingsController::new(mtm, iv.file_index.clone()));
+        controller.show();
     }
 
     /// Clears the field and results, shrinking the panel back to its base size.

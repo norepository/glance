@@ -1,4 +1,5 @@
-//! A single result row: app icon + name, with a selection highlight.
+//! A single result row: icon + title (+ optional subtitle), with a selection
+//! highlight.
 
 use std::cell::Cell;
 
@@ -9,14 +10,14 @@ use objc2_app_kit::{
 };
 use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
 
-use crate::core::app_index::AppEntry;
+use crate::core::item::SearchItem;
 
 pub const ROW_HEIGHT: f64 = 48.0;
 const ICON_SIZE: f64 = 32.0;
 const ICON_X: f64 = 14.0;
 const LABEL_X: f64 = 58.0;
-const LABEL_HEIGHT: f64 = 24.0;
-const LABEL_FONT_SIZE: f64 = 16.0;
+const TITLE_FONT_SIZE: f64 = 16.0;
+const SUBTITLE_FONT_SIZE: f64 = 11.0;
 
 define_class!(
     // A view that paints a selection background behind its contents.
@@ -40,7 +41,7 @@ define_class!(
 /// Builds a result row sized `width` × [`ROW_HEIGHT`]. The caller positions it.
 pub fn build_row(
     mtm: MainThreadMarker,
-    entry: &AppEntry,
+    item: &SearchItem,
     width: f64,
     selected: bool,
 ) -> Retained<NSView> {
@@ -50,38 +51,78 @@ pub fn build_row(
         unsafe { msg_send![super(this), initWithFrame: frame] }
     };
 
-    // Icon.
-    let icon_frame = NSRect::new(
-        NSPoint::new(ICON_X, (ROW_HEIGHT - ICON_SIZE) / 2.0),
-        NSSize::new(ICON_SIZE, ICON_SIZE),
-    );
-    let image_view = NSImageView::initWithFrame(NSImageView::alloc(mtm), icon_frame);
-    let path = entry.path.to_string_lossy();
-    let icon = NSWorkspace::sharedWorkspace().iconForFile(&NSString::from_str(&path));
-    image_view.setImage(Some(&icon));
-    image_view.setImageScaling(NSImageScaling::ScaleProportionallyUpOrDown);
-    row.addSubview(&image_view);
+    // Icon (apps + files; commands may have none).
+    if let Some(icon_path) = &item.icon_path {
+        let icon_frame = NSRect::new(
+            NSPoint::new(ICON_X, (ROW_HEIGHT - ICON_SIZE) / 2.0),
+            NSSize::new(ICON_SIZE, ICON_SIZE),
+        );
+        let image_view = NSImageView::initWithFrame(NSImageView::alloc(mtm), icon_frame);
+        let path = icon_path.to_string_lossy();
+        let icon = NSWorkspace::sharedWorkspace().iconForFile(&NSString::from_str(&path));
+        image_view.setImage(Some(&icon));
+        image_view.setImageScaling(NSImageScaling::ScaleProportionallyUpOrDown);
+        row.addSubview(&image_view);
+    }
 
-    // Name label.
-    let label_frame = NSRect::new(
-        NSPoint::new(LABEL_X, (ROW_HEIGHT - LABEL_HEIGHT) / 2.0),
-        NSSize::new(width - LABEL_X - ICON_X, LABEL_HEIGHT),
+    let label_width = width - LABEL_X - ICON_X;
+    let title_color = if selected {
+        NSColor::whiteColor()
+    } else {
+        NSColor::labelColor()
+    };
+
+    if let Some(subtitle) = &item.subtitle {
+        // Two lines: title above, subtitle below.
+        let title = make_label(mtm, &item.title, TITLE_FONT_SIZE, &title_color, label_width);
+        title.setFrame(NSRect::new(
+            NSPoint::new(LABEL_X, 22.0),
+            NSSize::new(label_width, 20.0),
+        ));
+        row.addSubview(&title);
+
+        let subtitle_color = if selected {
+            NSColor::whiteColor()
+        } else {
+            NSColor::secondaryLabelColor()
+        };
+        let sub = make_label(mtm, subtitle, SUBTITLE_FONT_SIZE, &subtitle_color, label_width);
+        sub.setFrame(NSRect::new(
+            NSPoint::new(LABEL_X, 7.0),
+            NSSize::new(label_width, 14.0),
+        ));
+        row.addSubview(&sub);
+    } else {
+        // Single centered title.
+        let title = make_label(mtm, &item.title, TITLE_FONT_SIZE, &title_color, label_width);
+        title.setFrame(NSRect::new(
+            NSPoint::new(LABEL_X, (ROW_HEIGHT - 22.0) / 2.0),
+            NSSize::new(label_width, 22.0),
+        ));
+        row.addSubview(&title);
+    }
+
+    Retained::into_super(row)
+}
+
+fn make_label(
+    mtm: MainThreadMarker,
+    text: &str,
+    font_size: f64,
+    color: &NSColor,
+    width: f64,
+) -> Retained<NSTextField> {
+    let label = NSTextField::initWithFrame(
+        NSTextField::alloc(mtm),
+        NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(width, 20.0)),
     );
-    let label = NSTextField::initWithFrame(NSTextField::alloc(mtm), label_frame);
-    label.setStringValue(&NSString::from_str(&entry.name));
+    label.setStringValue(&NSString::from_str(text));
     label.setBezeled(false);
     label.setBordered(false);
     label.setDrawsBackground(false);
     label.setEditable(false);
     label.setSelectable(false);
-    label.setFont(Some(&NSFont::systemFontOfSize(LABEL_FONT_SIZE)));
-    let text_color = if selected {
-        NSColor::whiteColor()
-    } else {
-        NSColor::labelColor()
-    };
-    label.setTextColor(Some(&text_color));
-    row.addSubview(&label);
-
-    Retained::into_super(row)
+    label.setFont(Some(&NSFont::systemFontOfSize(font_size)));
+    label.setTextColor(Some(color));
+    label
 }

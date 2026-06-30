@@ -71,12 +71,15 @@ impl AppDelegate {
         // Build the panel + search field + results list, and wire up the
         // search controller as the field's delegate (live search + nav).
         let (panel, field, results_view) = build_panel(mtm);
+        let engine = SearchEngine::new();
+        let file_index = engine.file_index();
         let controller = SearchController::new(
             mtm,
             panel.clone(),
             field.clone(),
             results_view,
-            SearchEngine::new(),
+            engine,
+            file_index,
         );
         let delegate = ProtocolObject::<dyn NSTextFieldDelegate>::from_ref(&*controller);
         unsafe { field.setDelegate(Some(delegate)) };
