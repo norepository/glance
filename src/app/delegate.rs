@@ -4,16 +4,18 @@
 use std::cell::{Cell, OnceCell};
 
 use objc2::rc::Retained;
-use objc2::runtime::NSObjectProtocol;
+use objc2::runtime::{NSObjectProtocol, ProtocolObject};
 use objc2::{define_class, msg_send, sel, DefinedClass, MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::{
-    NSApplication, NSApplicationDelegate, NSResponder, NSTextField,
+    NSApplication, NSApplicationDelegate, NSResponder, NSTextField, NSTextFieldDelegate,
 };
 use objc2_foundation::{NSNotification, NSObject, NSTimer};
 
 use global_hotkey::hotkey::{Code, HotKey, Modifiers};
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
 
+use crate::core::search::SearchEngine;
+use crate::ui::controller::SearchController;
 use crate::ui::panel::{build_panel, GlancePanel};
 
 /// How often we drain the global-hotkey channel from the run loop (seconds).
@@ -23,6 +25,7 @@ const HOTKEY_POLL_INTERVAL: f64 = 0.05;
 pub struct AppDelegateIvars {
     panel: OnceCell<Retained<GlancePanel>>,
     field: OnceCell<Retained<NSTextField>>,
+    controller: OnceCell<Retained<SearchController>>,
     hotkey_manager: OnceCell<GlobalHotKeyManager>,
     hotkey_id: Cell<u32>,
 }
@@ -65,10 +68,22 @@ impl AppDelegate {
     fn setup(&self) {
         let mtm = self.mtm();
 
-        // Build the panel + search field.
-        let (panel, field) = build_panel(mtm);
+        // Build the panel + search field + results list, and wire up the
+        // search controller as the field's delegate (live search + nav).
+        let (panel, field, results_view) = build_panel(mtm);
+        let controller = SearchController::new(
+            mtm,
+            panel.clone(),
+            field.clone(),
+            results_view,
+            SearchEngine::new(),
+        );
+        let delegate = ProtocolObject::<dyn NSTextFieldDelegate>::from_ref(&*controller);
+        unsafe { field.setDelegate(Some(delegate)) };
+
         let _ = self.ivars().panel.set(panel);
         let _ = self.ivars().field.set(field);
+        let _ = self.ivars().controller.set(controller);
 
         // Register ⌘+Space. Uses Carbon RegisterEventHotKey under the hood, so
         // no Accessibility permission is required. Note: ⌘+Space is macOS's
@@ -112,6 +127,10 @@ impl AppDelegate {
             if let Some(field) = self.ivars().field.get() {
                 let responder: &NSResponder = field;
                 panel.makeFirstResponder(Some(responder));
+            }
+            // Start each summon clean: empty field, no results, base size.
+            if let Some(controller) = self.ivars().controller.get() {
+                controller.reset();
             }
         }
     }

@@ -4,13 +4,14 @@ use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
 use objc2::{define_class, msg_send, MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::{
-    NSBackingStoreType, NSColor, NSFont, NSPanel, NSTextField, NSWindowCollectionBehavior,
-    NSWindowStyleMask,
+    NSBackingStoreType, NSColor, NSFont, NSPanel, NSTextField, NSView,
+    NSWindowCollectionBehavior, NSWindowStyleMask,
 };
 use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
 
-const PANEL_WIDTH: f64 = 640.0;
-const PANEL_HEIGHT: f64 = 60.0;
+pub const PANEL_WIDTH: f64 = 640.0;
+/// Height of the search field — the panel's height with no results showing.
+pub const BASE_HEIGHT: f64 = 60.0;
 const FONT_SIZE: f64 = 28.0;
 /// Above ordinary windows (NSStatusWindowLevel). Keeps the launcher on top.
 const PANEL_LEVEL: isize = 25;
@@ -51,12 +52,15 @@ define_class!(
     }
 );
 
-/// Builds the floating panel and its search field. The field is returned so the
-/// delegate can make it first responder when showing the panel.
-pub fn build_panel(mtm: MainThreadMarker) -> (Retained<GlancePanel>, Retained<NSTextField>) {
+/// Builds the floating panel, its search field, and the (initially empty)
+/// results container below the field. All three are returned so the controller
+/// can drive live search and resize the panel.
+pub fn build_panel(
+    mtm: MainThreadMarker,
+) -> (Retained<GlancePanel>, Retained<NSTextField>, Retained<NSView>) {
     let content_rect = NSRect::new(
         NSPoint::new(0.0, 0.0),
-        NSSize::new(PANEL_WIDTH, PANEL_HEIGHT),
+        NSSize::new(PANEL_WIDTH, BASE_HEIGHT),
     );
 
     let panel: Retained<GlancePanel> = unsafe {
@@ -80,7 +84,8 @@ pub fn build_panel(mtm: MainThreadMarker) -> (Retained<GlancePanel>, Retained<NS
         );
     }
 
-    // Search field fills the content view.
+    // Search field sits at the top of the content view (full content for now,
+    // re-framed to the top strip once results appear).
     let field = NSTextField::initWithFrame(NSTextField::alloc(mtm), content_rect);
     field.setBezeled(false);
     field.setBordered(false);
@@ -91,11 +96,44 @@ pub fn build_panel(mtm: MainThreadMarker) -> (Retained<GlancePanel>, Retained<NS
     field.setTextColor(Some(&NSColor::labelColor()));
     field.setPlaceholderString(Some(&NSString::from_str("Search…")));
 
+    // Results container, below the field. Starts zero-height (no results).
+    let results_rect = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(PANEL_WIDTH, 0.0));
+    let results_view = NSView::initWithFrame(NSView::alloc(mtm), results_rect);
+
     if let Some(content_view) = panel.contentView() {
         content_view.addSubview(&field);
+        content_view.addSubview(&results_view);
     }
 
     panel.center();
 
-    (panel, field)
+    (panel, field, results_view)
+}
+
+/// Resizes the panel to fit `results_height` of results below the search field,
+/// keeping the panel's top edge fixed (its origin is bottom-left), and re-frames
+/// the field (top strip) and results container (below) to match.
+pub fn resize(
+    panel: &GlancePanel,
+    field: &NSTextField,
+    results_view: &NSView,
+    results_height: f64,
+) {
+    let total = BASE_HEIGHT + results_height;
+
+    let mut frame = panel.frame();
+    let top = frame.origin.y + frame.size.height;
+    frame.size.height = total;
+    frame.origin.y = top - total;
+    panel.setFrame_display(frame, true);
+
+    let width = frame.size.width;
+    field.setFrame(NSRect::new(
+        NSPoint::new(0.0, results_height),
+        NSSize::new(width, BASE_HEIGHT),
+    ));
+    results_view.setFrame(NSRect::new(
+        NSPoint::new(0.0, 0.0),
+        NSSize::new(width, results_height),
+    ));
 }

@@ -4,6 +4,7 @@
 //! hotkey (⌥+Space), centered on screen, containing a basic search field.
 
 mod app;
+mod core;
 mod ui;
 
 use objc2::rc::Retained;

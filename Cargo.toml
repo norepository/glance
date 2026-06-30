@@ -11,6 +11,8 @@ objc2-foundation = { version = "0.3", features = [
     "NSObject",
     "NSNotification",
     "NSTimer",
+    "NSArray",
+    "NSURL",
 ] }
 objc2-app-kit = { version = "0.3", features = [
     "NSApplication",
@@ -20,11 +22,17 @@ objc2-app-kit = { version = "0.3", features = [
     "NSView",
     "NSControl",
     "NSTextField",
+    "NSTextView",
     "NSText",
     "NSScreen",
     "NSColor",
     "NSFont",
+    "NSImage",
+    "NSImageView",
+    "NSImageCell",
+    "NSWorkspace",
     "NSGraphics",
     "NSRunningApplication",
 ] }
 global-hotkey = "0.8"
+nucleo = "0.5"
