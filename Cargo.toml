@@ -1,0 +1,30 @@
+[package]
+name = "glance"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = [
+    "NSString",
+    "NSGeometry",
+    "NSObject",
+    "NSNotification",
+    "NSTimer",
+] }
+objc2-app-kit = { version = "0.3", features = [
+    "NSApplication",
+    "NSResponder",
+    "NSWindow",
+    "NSPanel",
+    "NSView",
+    "NSControl",
+    "NSTextField",
+    "NSText",
+    "NSScreen",
+    "NSColor",
+    "NSFont",
+    "NSGraphics",
+    "NSRunningApplication",
+] }
+global-hotkey = "0.8"
