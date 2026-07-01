@@ -58,3 +58,6 @@ If `action` is omitted, Return copies the title. The `glance.run(cmd)` helper ru
 command and returns its stdout. Plugins run as your own code with the full Lua standard
 library. After adding or editing a plugin, run **"Reload Plugins"** from the launcher (a
 `hello` example is created on first launch).
+
+## To Fix
+- User plugins buggy
