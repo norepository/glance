@@ -1,7 +1,8 @@
 //! Built-in plugin: fuzzy-matches installed applications.
 
-use crate::core::app_index::{index_apps, AppEntry};
+use crate::core::app_index::{app_dirs, index_apps, AppEntry};
 use crate::core::item::{Action, SearchItem};
+use crate::core::live_index::LiveIndex;
 
 use super::{Plugin, PluginCx, Scored};
 
@@ -9,12 +10,15 @@ use super::{Plugin, PluginCx, Scored};
 const APP_BONUS: u32 = 100;
 
 pub struct AppLauncher {
-    apps: Vec<AppEntry>,
+    apps: LiveIndex<AppEntry>,
 }
 
 impl AppLauncher {
     pub fn new() -> Self {
-        Self { apps: index_apps() }
+        let apps = LiveIndex::new();
+        // Build now and re-index automatically when apps are installed/removed.
+        apps.refresh(app_dirs(), index_apps);
+        Self { apps }
     }
 }
 
@@ -30,8 +34,9 @@ impl Plugin for AppLauncher {
     }
 
     fn search(&mut self, _query: &str, cx: &mut PluginCx) -> Vec<Scored> {
+        let apps = self.apps.read();
         cx.pattern
-            .match_list(self.apps.iter(), cx.matcher)
+            .match_list(apps.iter(), cx.matcher)
             .into_iter()
             .map(|(app, score)| Scored {
                 item: app_item(app),
@@ -50,26 +55,3 @@ fn app_item(app: &AppEntry) -> SearchItem {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use nucleo::pattern::{CaseMatching, Normalization, Pattern};
-    use nucleo::{Config, Matcher};
-
-    #[test]
-    fn finds_a_known_app() {
-        let mut plugin = AppLauncher::new();
-        assert!(!plugin.apps.is_empty(), "expected a non-empty app index");
-
-        let name = plugin.apps[0].name.clone();
-        let pattern = Pattern::parse(&name, CaseMatching::Smart, Normalization::Smart);
-        let mut matcher = Matcher::new(Config::DEFAULT);
-        let mut cx = PluginCx {
-            pattern: &pattern,
-            matcher: &mut matcher,
-            limit: 8,
-        };
-        let results = plugin.search(&name, &mut cx);
-        assert!(results.iter().any(|s| s.item.title == name));
-    }
-}

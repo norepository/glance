@@ -3,9 +3,11 @@
 //! search engine fuzzy-matches.
 
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock, RwLockReadGuard};
+use std::sync::RwLockReadGuard;
 
 use ignore::WalkBuilder;
+
+use crate::core::live_index::LiveIndex;
 
 /// Safety cap on indexed files, to bound memory/time for large trees.
 const FILE_CAP: usize = 200_000;
@@ -24,40 +26,28 @@ impl AsRef<str> for FileEntry {
     }
 }
 
-/// A handle to the shared file index. Cloning shares the same underlying store,
-/// so the search engine and the settings UI can both reach it.
-#[derive(Clone)]
+/// A handle to the shared, auto-refreshing file index. Cloning shares the same
+/// underlying store, so the search engine and the settings UI both reach it.
+#[derive(Clone, Default)]
 pub struct FileIndex {
-    entries: Arc<RwLock<Vec<FileEntry>>>,
+    index: LiveIndex<FileEntry>,
 }
 
 impl FileIndex {
     pub fn new() -> Self {
-        Self {
-            entries: Arc::new(RwLock::new(Vec::new())),
-        }
+        Self::default()
     }
 
-    /// Rebuilds the index from `folders` on a background thread, swapping in the
-    /// result when done. The launcher stays responsive in the meantime.
+    /// Rebuilds the index from `folders` now (in the background) and keeps it
+    /// current by watching those folders for changes.
     pub fn reindex(&self, folders: Vec<PathBuf>) {
-        let entries = Arc::clone(&self.entries);
-        std::thread::spawn(move || {
-            let indexed = index_files(&folders);
-            if let Ok(mut guard) = entries.write() {
-                *guard = indexed;
-            }
-        });
+        let build_folders = folders.clone();
+        self.index
+            .refresh(folders, move || index_files(&build_folders));
     }
 
     pub fn read(&self) -> RwLockReadGuard<'_, Vec<FileEntry>> {
-        self.entries.read().unwrap_or_else(|e| e.into_inner())
-    }
-}
-
-impl Default for FileIndex {
-    fn default() -> Self {
-        Self::new()
+        self.index.read()
     }
 }
 

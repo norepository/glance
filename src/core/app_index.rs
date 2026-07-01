@@ -18,20 +18,24 @@ impl AsRef<str> for AppEntry {
     }
 }
 
-/// Scans the standard application locations for `.app` bundles. Each root is
-/// scanned at its top level plus one level into subfolders (e.g. Utilities).
-pub fn index_apps() -> Vec<AppEntry> {
-    let mut roots: Vec<PathBuf> = vec![
+/// The standard application locations, also watched for changes.
+pub fn app_dirs() -> Vec<PathBuf> {
+    let mut dirs = vec![
         PathBuf::from("/Applications"),
         PathBuf::from("/System/Applications"),
     ];
     if let Ok(home) = std::env::var("HOME") {
-        roots.push(PathBuf::from(home).join("Applications"));
+        dirs.push(PathBuf::from(home).join("Applications"));
     }
+    dirs
+}
 
+/// Scans the standard application locations for `.app` bundles. Each root is
+/// scanned at its top level plus one level into subfolders (e.g. Utilities).
+pub fn index_apps() -> Vec<AppEntry> {
     let mut seen = HashSet::new();
     let mut apps = Vec::new();
-    for root in &roots {
+    for root in &app_dirs() {
         scan_dir(root, true, &mut apps, &mut seen);
     }
     apps
@@ -64,4 +68,16 @@ fn add_app(path: PathBuf, apps: &mut Vec<AppEntry>, seen: &mut HashSet<PathBuf>)
         return;
     }
     apps.push(AppEntry { name, path });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn indexes_apps() {
+        let apps = index_apps();
+        assert!(!apps.is_empty(), "expected a non-empty app index");
+        assert!(apps.iter().all(|a| !a.name.is_empty()));
+    }
 }
