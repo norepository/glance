@@ -10,7 +10,7 @@ We've all been there: you hit Spotlight, type a query, and get not what you were
 
 ## Features
 
-- **Global hotkey** — summon/dismiss a blurred, rounded panel with **⌘+Space**.
+- **Global hotkey** — summon/dismiss a blurred, rounded panel with **⌘+Space** or custom hotkey.
 - **App launcher** — fuzzy-matches installed apps and launches on Return.
 - **File search** — fuzzy-matches files in configured folders (default `$HOME`), indexed in
   the background.
@@ -26,6 +26,41 @@ We've all been there: you hit Spotlight, type a query, and get not what you were
 - macOS 
 - Rust 
 - Xcode **Command Line Tools**
+
+## Running
+
+```sh
+cargo run
+```
+
+Press **⌘+Space** to summon/dismiss the panel (configurable in Settings). Running via
+`cargo run` is the quickest way to develop, but it launches the bare binary 
+
+> **Note:** ⌘+Space is macOS's default Spotlight shortcut. If the panel doesn't appear, free
+> it up in **System Settings → Keyboard → Keyboard Shortcuts → Spotlight**, or pick a
+> different shortcut in Glance's settings.
+
+## Building the app
+
+Bundle a proper `Glance.app` (no Xcode project needed — Command Line Tools only):
+
+```sh
+./scripts/bundle.sh            # → target/release/bundle/Glance.app
+./scripts/bundle.sh --install  # also copies it to /Applications
+```
+
+## App icon
+
+Generate `bundle/Glance.icns` from any emoji (uses only `swift` + `sips` + `iconutil`):
+
+```sh
+./scripts/make_icon.sh 🧿      # any emoji; omit for the default
+./scripts/bundle.sh --install  # rebuild so the icon takes effect
+```
+
+Edit the `NSColor(...)` line in `scripts/make_icon.sh` to change the background card color,
+or remove the background fill for a transparent, glyph-only icon. macOS caches icons
+aggressively — if the old one lingers after reinstalling, run `killall Dock Finder`.
 
 ## Writing plugins
 
@@ -63,3 +98,4 @@ library. After adding or editing a plugin, run **"Reload Plugins"** from the lau
 
 ## To Fix
 - User plugins buggy
+- Sometimes buggy when opening new applications
