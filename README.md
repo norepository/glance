@@ -90,6 +90,7 @@ command and returns its stdout. Plugins run as your own code with the full Lua s
 library. After adding or editing a plugin, run **"Reload Plugins"** from the launcher (a
 `hello` example is created on first launch).
 
-## To Fix
+## To Fix/Do
 - User plugins buggy
 - Sometimes buggy when opening new applications
+- Calendar events when opening Glance
