@@ -2,6 +2,8 @@
 
 A blazing fast, native and minimal launcher for macOS 
 
+![preview](./assets/default.png)
+
 ## Why
 
 We've all been there: you hit Spotlight, type a query, and get not what you were looking for. This tool fixes that — and it's faster too.
