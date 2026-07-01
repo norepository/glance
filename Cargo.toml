@@ -2,6 +2,13 @@
 name = "glance"
 version = "0.1.0"
 edition = "2021"
+description = "A fast, native, minimal launcher for macOS"
+license = "GPL-3.0-or-later"
+readme = "README.md"
+keywords = ["macos", "launcher", "spotlight", "productivity", "appkit"]
+categories = ["gui", "os::macos-apis"]
+publish = false
+repository = "https://github.com/norepository/glance"
 
 [dependencies]
 objc2 = "0.6"
