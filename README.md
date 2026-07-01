@@ -37,8 +37,7 @@ Press **⌘+Space** to summon/dismiss the panel (configurable in Settings). Runn
 `cargo run` is the quickest way to develop, but it launches the bare binary 
 
 > **Note:** ⌘+Space is macOS's default Spotlight shortcut. If the panel doesn't appear, free
-> it up in **System Settings → Keyboard → Keyboard Shortcuts → Spotlight**, or pick a
-> different shortcut in Glance's settings.
+> it up in **System Settings → Keyboard → Keyboard Shortcuts → Spotlight**
 
 ## Building the app
 
