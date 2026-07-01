@@ -8,8 +8,8 @@ use objc2::rc::Retained;
 use objc2::runtime::{NSObjectProtocol, Sel};
 use objc2::{define_class, msg_send, sel, DefinedClass, MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::{
-    NSControl, NSControlTextEditingDelegate, NSTextField, NSTextFieldDelegate, NSTextView, NSView,
-    NSWorkspace,
+    NSControl, NSControlTextEditingDelegate, NSPasteboard, NSPasteboardTypeString, NSTextField,
+    NSTextFieldDelegate, NSTextView, NSView, NSWorkspace,
 };
 use objc2_foundation::{NSNotification, NSObject, NSPoint, NSRect, NSSize, NSString, NSURL};
 
@@ -155,14 +155,47 @@ impl SearchController {
             Action::Open(path) => {
                 let url = NSURL::fileURLWithPath(&NSString::from_str(&path.to_string_lossy()));
                 let _ = NSWorkspace::sharedWorkspace().openURL(&url);
-                self.reset();
-                self.ivars().panel.orderOut(None);
+                // The opened app/file takes focus; don't yank it back.
+                self.hide(false);
+            }
+            Action::OpenUrl(url) => {
+                if let Some(url) = NSURL::URLWithString(&NSString::from_str(&url)) {
+                    let _ = NSWorkspace::sharedWorkspace().openURL(&url);
+                }
+                self.hide(false);
+            }
+            Action::Copy(text) => {
+                let pasteboard = NSPasteboard::generalPasteboard();
+                pasteboard.clearContents();
+                unsafe {
+                    pasteboard
+                        .setString_forType(&NSString::from_str(&text), NSPasteboardTypeString);
+                }
+                // Return focus so the copied text can be pasted where you were.
+                self.hide(true);
+            }
+            Action::Run { program, args } => {
+                let _ = std::process::Command::new(program).args(args).spawn();
+                self.hide(false);
             }
             Action::OpenSettings => {
-                self.reset();
-                self.ivars().panel.orderOut(None);
+                self.hide(false);
                 self.open_settings();
             }
+            Action::ReloadPlugins => {
+                self.ivars().engine.borrow_mut().reload_plugins();
+                self.hide(true);
+            }
+        }
+    }
+
+    /// Clears state and hides the panel after an action. When `restore` is set,
+    /// focus is handed back to the app that was frontmost before Glance opened.
+    fn hide(&self, restore: bool) {
+        self.reset();
+        self.ivars().panel.orderOut(None);
+        if restore {
+            self.ivars().panel.restore_previous_app();
         }
     }
 

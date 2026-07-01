@@ -7,7 +7,7 @@ use objc2::rc::Retained;
 use objc2::runtime::{NSObjectProtocol, ProtocolObject};
 use objc2::{define_class, msg_send, sel, DefinedClass, MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::{
-    NSApplication, NSApplicationDelegate, NSResponder, NSTextField, NSTextFieldDelegate,
+    NSApplication, NSApplicationDelegate, NSResponder, NSTextField, NSTextFieldDelegate, NSWorkspace,
 };
 use objc2_foundation::{NSNotification, NSObject, NSTimer};
 
@@ -123,7 +123,15 @@ impl AppDelegate {
 
         if panel.isVisible() {
             panel.orderOut(None);
+            panel.restore_previous_app();
         } else {
+            // Remember who was frontmost (unless it's us) so we can hand focus
+            // back on dismiss.
+            let frontmost = NSWorkspace::sharedWorkspace().frontmostApplication();
+            let current_pid = std::process::id() as i32;
+            let previous = frontmost.filter(|app| app.processIdentifier() != current_pid);
+            panel.set_previous_app(previous);
+
             let app = NSApplication::sharedApplication(self.mtm());
             app.activate();
             panel.makeKeyAndOrderFront(None);

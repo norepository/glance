@@ -8,8 +8,16 @@ use std::path::PathBuf;
 pub enum Action {
     /// Open a file or app bundle with its default handler.
     Open(PathBuf),
+    /// Open a web URL in the default browser.
+    OpenUrl(String),
     /// Open the Glance settings window.
     OpenSettings,
+    /// Copy text to the clipboard.
+    Copy(String),
+    /// Run a command detached (used by Lua plugins).
+    Run { program: String, args: Vec<String> },
+    /// Re-scan and reload user Lua plugins.
+    ReloadPlugins,
 }
 
 #[derive(Clone)]

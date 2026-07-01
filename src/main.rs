@@ -5,6 +5,7 @@
 
 mod app;
 mod core;
+mod plugins;
 mod ui;
 
 use objc2::rc::Retained;

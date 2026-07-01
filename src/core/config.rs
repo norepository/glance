@@ -49,8 +49,17 @@ fn home_dir() -> Option<PathBuf> {
 
 /// `$HOME/Library/Application Support/Glance/config.json`.
 pub fn config_path() -> PathBuf {
+    support_dir().join("config.json")
+}
+
+/// `$HOME/Library/Application Support/Glance/plugins` — where user Lua plugins live.
+pub fn plugins_dir() -> PathBuf {
+    support_dir().join("plugins")
+}
+
+fn support_dir() -> PathBuf {
     let mut path = home_dir().unwrap_or_else(|| PathBuf::from("."));
-    path.push("Library/Application Support/Glance/config.json");
+    path.push("Library/Application Support/Glance");
     path
 }
 

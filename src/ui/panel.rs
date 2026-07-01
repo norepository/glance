@@ -1,12 +1,14 @@
 //! The borderless floating `NSPanel` and its search field.
 
+use std::cell::RefCell;
+
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
-use objc2::{define_class, msg_send, MainThreadMarker, MainThreadOnly};
+use objc2::{define_class, msg_send, DefinedClass, MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::{
-    NSBackingStoreType, NSColor, NSFocusRingType, NSFont, NSPanel, NSTextField, NSView,
-    NSVisualEffectBlendingMode, NSVisualEffectMaterial, NSVisualEffectState, NSVisualEffectView,
-    NSWindowCollectionBehavior, NSWindowStyleMask,
+    NSApplicationActivationOptions, NSBackingStoreType, NSColor, NSFocusRingType, NSFont, NSPanel,
+    NSRunningApplication, NSTextField, NSView, NSVisualEffectBlendingMode, NSVisualEffectMaterial,
+    NSVisualEffectState, NSVisualEffectView, NSWindowCollectionBehavior, NSWindowStyleMask,
 };
 use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
 
@@ -22,10 +24,18 @@ const CORNER_RADIUS: f64 = 14.0;
 const FIELD_TOP_PAD: f64 = 12.0;
 const FIELD_X: f64 = 16.0;
 
+/// Remembers the app that was frontmost when Glance opened, so focus can be
+/// handed back on dismiss.
+#[derive(Default)]
+pub struct GlancePanelIvars {
+    previous_app: RefCell<Option<Retained<NSRunningApplication>>>,
+}
+
 define_class!(
     #[unsafe(super(NSPanel))]
     #[thread_kind = MainThreadOnly]
     #[name = "GlancePanel"]
+    #[ivars = GlancePanelIvars]
     pub struct GlancePanel;
 
     impl GlancePanel {
@@ -42,10 +52,11 @@ define_class!(
         }
 
         // Esc in the search field travels up the responder chain as
-        // `cancelOperation:` — hide the panel.
+        // `cancelOperation:` — hide the panel and return focus.
         #[unsafe(method(cancelOperation:))]
         fn cancel_operation(&self, _sender: Option<&AnyObject>) {
             self.orderOut(None);
+            self.restore_previous_app();
         }
 
         // Click-away: when the panel loses key status (user clicks another
@@ -58,6 +69,21 @@ define_class!(
     }
 );
 
+impl GlancePanel {
+    /// Records the app that was frontmost before Glance opened.
+    pub fn set_previous_app(&self, app: Option<Retained<NSRunningApplication>>) {
+        *self.ivars().previous_app.borrow_mut() = app;
+    }
+
+    /// Reactivates the previously-frontmost app, restoring its window's focus
+    /// (e.g. the text field the user was typing in). Consumes the stored app.
+    pub fn restore_previous_app(&self) {
+        if let Some(app) = self.ivars().previous_app.borrow_mut().take() {
+            app.activateWithOptions(NSApplicationActivationOptions::empty());
+        }
+    }
+}
+
 /// Builds the floating panel, its search field, and the (initially empty)
 /// results container below the field. All three are returned so the controller
 /// can drive live search and resize the panel.
@@ -69,9 +95,10 @@ pub fn build_panel(
         NSSize::new(PANEL_WIDTH, BASE_HEIGHT),
     );
 
+    let this = GlancePanel::alloc(mtm).set_ivars(GlancePanelIvars::default());
     let panel: Retained<GlancePanel> = unsafe {
         msg_send![
-            GlancePanel::alloc(mtm),
+            super(this),
             initWithContentRect: content_rect,
             styleMask: NSWindowStyleMask::Borderless,
             backing: NSBackingStoreType::Buffered,

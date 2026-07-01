@@ -1,80 +1,60 @@
-# Glance
+# 🧿 Glance
 
-A fast, native, minimal app launcher for macOS — Spotlight-style, written in Rust on
-AppKit. No Electron, no webview, no runtime. Just a compiled binary that summons a
-floating search panel the instant you press a key.
-
-> **Status:** Milestone 1 — the window mechanics work. A borderless panel toggles on a
-> global hotkey, takes focus, and dismisses cleanly. Search, app indexing, and plugins
-> are next.
+A blazing fast, native and minimal launcher for macOS 
 
 ## Why
 
-Built as a reaction to Electron-based launchers feeling sluggish. The goal is a
-keystroke-to-result budget of **under 16 ms** by talking to AppKit directly instead of
-shipping a browser.
+We've all been there: you hit Spotlight, type a query, and get not what you were looking for. This tool fixes that — and it's faster too.
 
-## Features so far
+## Features
 
-- **Global hotkey** — summon/dismiss the panel with **⌘+Space** from anywhere.
-- **Borderless floating panel** — a centered `NSPanel` that takes keyboard focus and
-  floats above other windows.
-- **Quick dismissal** — **Esc** hides it; clicking away (losing focus) hides it.
-- **No Dock icon** — runs as an accessory agent.
-- **No special permissions** — the hotkey uses Carbon's `RegisterEventHotKey`, so there's
-  no Accessibility prompt.
+- **Global hotkey** — summon/dismiss a blurred, rounded panel with **⌘+Space**.
+- **App launcher** — fuzzy-matches installed apps and launches on Return.
+- **File search** — fuzzy-matches files in configured folders (default `$HOME`), indexed in
+  the background.
+- **Calculator + units** — `2+2`, `sqrt(2)`, `5 km in miles`; Return copies the result.
+- **Web search / quick links** — `g rust traits`, `yt lofi`, `gh …`, or bare URLs.
+- **Settings window** — manage search folders and more
+- **User plugins in Lua** — drop a script in the plugins folder to add your own commands
+  (see [Writing plugins](#writing-plugins)).
+- **No Dock icon** — runs as an accessory agent; quit from the settings window.
 
 ## Requirements
 
-- macOS (developed against macOS 26)
-- Rust (developed against 1.96)
-- Xcode **Command Line Tools** — no full Xcode / `.xcodeproj` needed
+- macOS 
+- Rust 
+- Xcode **Command Line Tools**
 
-## Run
+## Writing plugins
 
-```sh
-cargo run
+User plugins are Lua scripts in `~/Library/Application Support/Glance/plugins/`. Each plugin
+is a folder containing a `plugin.lua` that returns a table:
+
+```lua
+return {
+  name = "Weather",
+  keyword = "wt",  -- optional; if set, the plugin only runs on "wt" or "wt <rest>"
+  search = function(query)
+    local report = glance.run("curl -s wttr.in/" .. query .. "?format=3")
+    return {
+      { title = report, subtitle = "press return to copy",
+        action = { type = "copy", value = report } },
+    }
+  end,
+}
 ```
 
-Press **⌘+Space** to toggle the panel.
+`search(query)` returns a list of result items. Each item has `title`, an optional
+`subtitle` and `icon` (a file path), and an `action`:
 
-> **Note:** ⌘+Space is macOS's default Spotlight shortcut. If the panel doesn't appear,
-> free up the key in **System Settings → Keyboard → Keyboard Shortcuts → Spotlight**
-> (uncheck "Show Spotlight search"), then relaunch. The terminal prints a clear message if
-> the hotkey couldn't be registered.
+| Action | Effect |
+| --- | --- |
+| `{ type = "open", value = "/path" }` | Open a file/app with its default handler |
+| `{ type = "url", value = "https://…" }` | Open a URL in the browser |
+| `{ type = "copy", value = "text" }` | Copy text to the clipboard |
+| `{ type = "run", program = "…", args = {…} }` | Run a command detached |
 
-## Architecture
-
-```
-src/
-├── main.rs            # NSApplication setup, accessory policy, install delegate, run loop
-├── app/
-│   └── delegate.rs    # AppDelegate: owns the panel + hotkey, polls events, toggles
-└── ui/
-    └── panel.rs       # GlancePanel (borderless NSPanel) + search field
-```
-
-Built on [`objc2`](https://crates.io/crates/objc2) for AppKit bindings,
-[`global-hotkey`](https://crates.io/crates/global-hotkey) for the system shortcut.
-
-A few implementation notes:
-
-- **`GlancePanel` subclasses `NSPanel`** and overrides `canBecomeKeyWindow` — a borderless
-  `NSWindow` refuses key status, so its text field couldn't accept input. An `NSPanel`
-  can.
-- **Hotkey events are drained from the run loop** by a repeating `NSTimer`.
-  `global-hotkey` delivers events over a channel rather than pushing them, so we poll it
-  (~50 ms) from the main thread where AppKit lives.
-- **Dismissal** is handled in `NSResponder`/`NSWindow` overrides: `cancelOperation:` for
-  Esc, `resignKeyWindow` for click-away.
-
-## Roadmap
-
-- [x] **M1** — Borderless panel toggling on a global hotkey
-- [ ] **M2** — App indexing + fuzzy search + result list
-- [ ] **M3** — Plugin trait + Calculator plugin alongside the app launcher
-- [ ] **M4** — Vibrancy/blur, icon caching, performance pass, `.app` bundling + signing
-
-## License
-
-TBD.
+If `action` is omitted, Return copies the title. The `glance.run(cmd)` helper runs a shell
+command and returns its stdout. Plugins run as your own code with the full Lua standard
+library. After adding or editing a plugin, run **"Reload Plugins"** from the launcher (a
+`hello` example is created on first launch).

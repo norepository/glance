@@ -25,5 +25,9 @@
     <true/>
     <key>CFBundleIconFile</key>
     <string>Glance</string>
+    <key>NSCalendarsUsageDescription</key>
+    <string>Glance shows your upcoming calendar events.</string>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>Glance shows your upcoming calendar events.</string>
 </dict>
 </plist>
