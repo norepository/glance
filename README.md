@@ -42,20 +42,15 @@ Press **⌘+Space** to summon/dismiss the panel (configurable in Settings). Runn
 
 ## Building the app
 
-Bundle a proper `Glance.app` (no Xcode project needed — Command Line Tools only):
+Bundle a proper `Glance.app`
+
+```sh
+./scripts/make_icon.sh 🧿      # any emoji; omit for the default
+```
 
 ```sh
 ./scripts/bundle.sh            # → target/release/bundle/Glance.app
 ./scripts/bundle.sh --install  # also copies it to /Applications
-```
-
-## App icon
-
-Generate `bundle/Glance.icns` from any emoji (uses only `swift` + `sips` + `iconutil`):
-
-```sh
-./scripts/make_icon.sh 🧿      # any emoji; omit for the default
-./scripts/bundle.sh --install  # rebuild so the icon takes effect
 ```
 
 Edit the `NSColor(...)` line in `scripts/make_icon.sh` to change the background card color,
