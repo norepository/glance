@@ -16,6 +16,7 @@ use crate::plugins::calendar::Calendar;
 use crate::plugins::file_search::FileSearch;
 use crate::plugins::lua_host::ScriptHost;
 use crate::plugins::system::System;
+use crate::plugins::timer::Timer;
 use crate::plugins::web_search::WebSearch;
 use crate::plugins::{Plugin, PluginCx};
 
@@ -29,6 +30,7 @@ impl SearchEngine {
         let plugins: Vec<Box<dyn Plugin>> = vec![
             Box::new(Calculator::new()),
             Box::new(WebSearch::new(web_links)),
+            Box::new(Timer::new()),
             Box::new(Calendar::new()),
             Box::new(AppLauncher::new()),
             Box::new(FileSearch::new(file_index)),

@@ -18,6 +18,18 @@ pub enum Action {
     Run { program: String, args: Vec<String> },
     /// Re-scan and reload user Lua plugins.
     ReloadPlugins,
+    /// Start a countdown timer.
+    StartTimer { seconds: u64, label: Option<String> },
+    /// Drill into a timer's management actions.
+    ShowTimer(u64),
+    /// Pause or resume a timer.
+    ToggleTimer(u64),
+    /// Restart a timer from its full duration.
+    RestartTimer(u64),
+    /// Cancel and remove a timer.
+    CancelTimer(u64),
+    /// Return to the active-timer list.
+    ShowTimerList,
 }
 
 #[derive(Clone)]

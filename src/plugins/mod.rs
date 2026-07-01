@@ -8,6 +8,7 @@ pub mod calendar;
 pub mod file_search;
 pub mod lua_host;
 pub mod system;
+pub mod timer;
 pub mod web_search;
 
 use nucleo::pattern::Pattern;
