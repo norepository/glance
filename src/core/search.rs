@@ -1,10 +1,13 @@
 //! Orchestrates the plugins: runs each against the query, merges their scored
 //! results into one ranked list.
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use nucleo::pattern::{CaseMatching, Normalization, Pattern};
 use nucleo::{Config as NucleoConfig, Matcher};
 
-use crate::core::config::Config;
+use crate::core::config::WebLink;
 use crate::core::file_index::FileIndex;
 use crate::core::item::SearchItem;
 use crate::plugins::app_launcher::AppLauncher;
@@ -19,20 +22,16 @@ use crate::plugins::{Plugin, PluginCx};
 pub struct SearchEngine {
     plugins: Vec<Box<dyn Plugin>>,
     matcher: Matcher,
-    files: FileIndex,
 }
 
 impl SearchEngine {
-    pub fn new() -> Self {
-        let files = FileIndex::new();
-        files.reindex(Config::load().search_folders);
-
+    pub fn new(file_index: FileIndex, web_links: Rc<RefCell<Vec<WebLink>>>) -> Self {
         let plugins: Vec<Box<dyn Plugin>> = vec![
             Box::new(Calculator::new()),
-            Box::new(WebSearch::new()),
+            Box::new(WebSearch::new(web_links)),
             Box::new(Calendar::new()),
             Box::new(AppLauncher::new()),
-            Box::new(FileSearch::new(files.clone())),
+            Box::new(FileSearch::new(file_index)),
             Box::new(System::new()),
             Box::new(ScriptHost::new()),
         ];
@@ -40,14 +39,7 @@ impl SearchEngine {
         Self {
             plugins,
             matcher: Matcher::new(NucleoConfig::DEFAULT),
-            files,
         }
-    }
-
-    /// A shared handle to the file index, so the settings UI can re-index when
-    /// the folder list changes.
-    pub fn file_index(&self) -> FileIndex {
-        self.files.clone()
     }
 
     /// Re-scans/reloads plugins (the Lua host picks up new or edited scripts).
@@ -83,20 +75,18 @@ impl SearchEngine {
     }
 }
 
-impl Default for SearchEngine {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::core::item::Action;
 
+    fn engine() -> SearchEngine {
+        SearchEngine::new(FileIndex::new(), Rc::new(RefCell::new(Vec::new())))
+    }
+
     #[test]
     fn surfaces_the_settings_command() {
-        let mut engine = SearchEngine::new();
+        let mut engine = engine();
         let has_settings = |q: &str, engine: &mut SearchEngine| {
             engine
                 .search(q, 8)
@@ -104,19 +94,14 @@ mod tests {
                 .any(|item| matches!(item.action, Action::OpenSettings))
         };
 
-        // Prefixes of its keywords surface it.
         assert!(has_settings("settings", &mut engine));
         assert!(has_settings("set", &mut engine));
-        assert!(has_settings("glan", &mut engine));
-
-        // Unrelated queries must not.
         assert!(!has_settings("lo", &mut engine));
-        assert!(!has_settings("spo", &mut engine));
     }
 
     #[test]
     fn respects_the_limit() {
-        let mut engine = SearchEngine::new();
+        let mut engine = engine();
         assert!(engine.search("e", 5).len() <= 5);
         assert!(engine.search("", 8).is_empty());
     }

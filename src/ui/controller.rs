@@ -13,21 +13,17 @@ use objc2_app_kit::{
 };
 use objc2_foundation::{NSNotification, NSObject, NSPoint, NSRect, NSSize, NSString, NSURL};
 
-use crate::core::file_index::FileIndex;
+use crate::app::shared::Shared;
 use crate::core::item::{Action, SearchItem};
-use crate::core::search::SearchEngine;
 use crate::ui::panel::{self, GlancePanel, PANEL_WIDTH};
 use crate::ui::result_row::{build_row, ROW_HEIGHT};
 use crate::ui::settings::SettingsController;
-
-const MAX_RESULTS: usize = 8;
 
 pub struct SearchControllerIvars {
     panel: Retained<GlancePanel>,
     field: Retained<NSTextField>,
     results_view: Retained<NSView>,
-    engine: RefCell<SearchEngine>,
-    file_index: FileIndex,
+    shared: Shared,
     results: RefCell<Vec<SearchItem>>,
     selected: Cell<usize>,
     settings: RefCell<Option<Retained<SettingsController>>>,
@@ -49,7 +45,8 @@ define_class!(
         #[unsafe(method(controlTextDidChange:))]
         fn control_text_did_change(&self, _notification: &NSNotification) {
             let query = self.ivars().field.stringValue().to_string();
-            let results = self.ivars().engine.borrow_mut().search(&query, MAX_RESULTS);
+            let limit = self.ivars().shared.max_results.get();
+            let results = self.ivars().shared.engine.borrow_mut().search(&query, limit);
             *self.ivars().results.borrow_mut() = results;
             self.ivars().selected.set(0);
             self.render();
@@ -85,15 +82,13 @@ impl SearchController {
         panel: Retained<GlancePanel>,
         field: Retained<NSTextField>,
         results_view: Retained<NSView>,
-        engine: SearchEngine,
-        file_index: FileIndex,
+        shared: Shared,
     ) -> Retained<Self> {
         let ivars = SearchControllerIvars {
             panel,
             field,
             results_view,
-            engine: RefCell::new(engine),
-            file_index,
+            shared,
             results: RefCell::new(Vec::new()),
             selected: Cell::new(0),
             settings: RefCell::new(None),
@@ -183,7 +178,7 @@ impl SearchController {
                 self.open_settings();
             }
             Action::ReloadPlugins => {
-                self.ivars().engine.borrow_mut().reload_plugins();
+                self.ivars().shared.engine.borrow_mut().reload_plugins();
                 self.hide(true);
             }
         }
@@ -204,7 +199,7 @@ impl SearchController {
         let iv = self.ivars();
         let mut slot = iv.settings.borrow_mut();
         let controller =
-            slot.get_or_insert_with(|| SettingsController::new(mtm, iv.file_index.clone()));
+            slot.get_or_insert_with(|| SettingsController::new(mtm, iv.shared.clone()));
         controller.show();
     }
 

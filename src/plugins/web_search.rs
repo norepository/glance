@@ -1,38 +1,24 @@
 //! Built-in plugin: keyword web searches (`g rust traits`, `yt lofi`) and bare
-//! URLs/domains, opened in the default browser.
+//! URLs/domains, opened in the default browser. The keyword→URL list is
+//! config-driven (edited in settings), so it's read live on each search.
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use crate::core::config::WebLink;
 use crate::core::item::{Action, SearchItem};
 
 use super::{Plugin, PluginCx, Scored};
 
 const WEB_SCORE: u32 = 9_000;
 
-struct Site {
-    keyword: &'static str,
-    name: &'static str,
-    /// Search URL with a `{}` placeholder for the (encoded) query.
-    url: &'static str,
+pub struct WebSearch {
+    links: Rc<RefCell<Vec<WebLink>>>,
 }
-
-const SITES: &[Site] = &[
-    Site { keyword: "s", name: "DuckDuckGo", url: "https://duckduckgo.com/?q={}" },
-    Site { keyword: "g", name: "Google", url: "https://www.google.com/search?q={}" },
-    Site { keyword: "yt", name: "YouTube", url: "https://www.youtube.com/results?search_query={}" },
-    Site { keyword: "gh", name: "GitHub", url: "https://github.com/search?q={}" },
-    Site { keyword: "w", name: "Wikipedia", url: "https://en.wikipedia.org/w/index.php?search={}" },
-];
-
-pub struct WebSearch;
 
 impl WebSearch {
-    pub fn new() -> Self {
-        WebSearch
-    }
-}
-
-impl Default for WebSearch {
-    fn default() -> Self {
-        Self::new()
+    pub fn new(links: Rc<RefCell<Vec<WebLink>>>) -> Self {
+        Self { links }
     }
 }
 
@@ -46,9 +32,12 @@ impl Plugin for WebSearch {
         if let Some((head, rest)) = query.split_once(' ') {
             let rest = rest.trim();
             if !rest.is_empty() {
-                if let Some(site) = SITES.iter().find(|s| s.keyword == head) {
-                    let url = site.url.replace("{}", &urlencode(rest));
-                    return vec![item(format!("Search {} for \u{201c}{rest}\u{201d}", site.name), url)];
+                if let Some(link) = self.links.borrow().iter().find(|l| l.keyword == head) {
+                    let url = link.url.replace("{}", &urlencode(rest));
+                    return vec![item(
+                        format!("Search {} for \u{201c}{rest}\u{201d}", link.name),
+                        url,
+                    )];
                 }
             }
         }
@@ -119,7 +108,12 @@ mod tests {
     use nucleo::{Config, Matcher};
 
     fn run(q: &str) -> Vec<Scored> {
-        let mut web = WebSearch::new();
+        let links = Rc::new(RefCell::new(vec![WebLink {
+            keyword: "g".to_string(),
+            name: "Google".to_string(),
+            url: "https://www.google.com/search?q={}".to_string(),
+        }]));
+        let mut web = WebSearch::new(links);
         let pattern = Pattern::parse(q, CaseMatching::Smart, Normalization::Smart);
         let mut matcher = Matcher::new(Config::DEFAULT);
         let mut cx = PluginCx {
